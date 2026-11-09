@@ -1,6 +1,6 @@
 # Generated
-entities.json
-blob_bounding_boxes.csv
+/entities.json
+/blob_bounding_boxes.csv
 __pycache__/
 *.pyc
 .pytest_cache/
