@@ -70,8 +70,22 @@ Measured on `samples/news_article.pdf` (7 expected entities):
 | **0.5** | **6** | **0** |
 | 0.6 | 5 (Valencia drops from 4 to 1) | 0 |
 
-"Spain" is missed at every threshold: a real limitation of the 60M model, documented in the README rather than
-hidden by tuning the sample text.
+With the labels `person, organization, location`, "Spain" is missed at every threshold. The next decision fixes
+it with the label set, not the threshold.
+
+### Default labels add "country" (and not "city")
+GLiNER is zero-shot: it scores spans against the label *names*, so label wording matters as much as the
+threshold. Measured at threshold 0.5 on the same PDF:
+
+| labels | Spain | other 6 entities | false positives |
+|---|---|---|---|
+| person, organization, location | missed | exact counts | 0 |
+| **+ country** | **1 [country]** | identical counts and labels | 0 |
+| + country + city | 1 [country] | same counts; Valencia and Rotterdam relabelled `city` | 0 |
+
+`+ country` is the smallest change that finds Spain without side effects. `city` finds nothing new; it only
+splits places between `location` and `city`, so `list_entities(label="location")` would stop returning
+Valencia and Rotterdam. Caveat: this was tuned on a single short document, and `--labels` overrides it.
 
 ### JSON store, normalized key recomputed on load
 JSON rather than SQLite: the store is a few hundred records at most, the test fixture `tests/entities.json` must be
