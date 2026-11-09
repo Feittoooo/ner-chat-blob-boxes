@@ -687,6 +687,45 @@ wheels = [
 ]
 
 [[package]]
+name = "ner-chat-blob-boxes"
+version = "0.1.0"
+source = { editable = "." }
+dependencies = [
+    { name = "gliner" },
+    { name = "glinker" },
+    { name = "kreuzberg" },
+    { name = "pydantic" },
+    { name = "pydantic-ai-slim", extra = ["anthropic", "openai"] },
+    { name = "torch", version = "2.15.0", source = { registry = "https://pypi.org/simple" }, marker = "sys_platform != 'linux' and sys_platform != 'win32'" },
+    { name = "torch", version = "2.15.0+cpu", source = { registry = "https://download.pytorch.org/whl/cpu" }, marker = "sys_platform == 'linux' or sys_platform == 'win32'" },
+]
+
+[package.dev-dependencies]
+dev = [
+    { name = "fpdf2" },
+    { name = "pillow" },
+    { name = "pytest" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "gliner", specifier = "==0.2.30" },
+    { name = "glinker", specifier = "==0.1.1" },
+    { name = "kreuzberg", specifier = "==4.10.4" },
+    { name = "pydantic", specifier = "==2.14.3" },
+    { name = "pydantic-ai-slim", extras = ["anthropic", "openai"], specifier = "==2.66.0" },
+    { name = "torch", marker = "sys_platform != 'linux' and sys_platform != 'win32'", specifier = "==2.15.0" },
+    { name = "torch", marker = "sys_platform == 'linux' or sys_platform == 'win32'", specifier = "==2.15.0", index = "https://download.pytorch.org/whl/cpu" },
+]
+
+[package.metadata.requires-dev]
+dev = [
+    { name = "fpdf2", specifier = "==2.9.0" },
+    { name = "pillow", specifier = "==13.0.0" },
+    { name = "pytest", specifier = "==9.2.0" },
+]
+
+[[package]]
 name = "networkx"
 version = "3.7"
 source = { registry = "https://pypi.org/simple" }
@@ -1299,45 +1338,6 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/83/d3/803453b36afefb7c2bb238361cd4ae6125a569b4db67cd9e79846ba2d68c/sympy-1.14.0.tar.gz", hash = "sha256:d3d3fe8df1e5a0b42f0e7bdf50541697dbe7d23746e894990c030e2b05e72517", size = 7793921, upload-time = "2025-04-27T18:05:01.611Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/a2/09/77d55d46fd61b4a135c444fc97158ef34a095e5681d0a6c10b75bf356191/sympy-1.14.0-py3-none-any.whl", hash = "sha256:e091cc3e99d2141a0ba2847328f5479b05d94a6635cb96148ccb3f34671bd8f5", size = 6299353, upload-time = "2025-04-27T18:04:59.103Z" },
-]
-
-[[package]]
-name = "ner-chat-blob-boxes"
-version = "0.1.0"
-source = { editable = "." }
-dependencies = [
-    { name = "gliner" },
-    { name = "glinker" },
-    { name = "kreuzberg" },
-    { name = "pydantic" },
-    { name = "pydantic-ai-slim", extra = ["anthropic", "openai"] },
-    { name = "torch", version = "2.15.0", source = { registry = "https://pypi.org/simple" }, marker = "sys_platform != 'linux' and sys_platform != 'win32'" },
-    { name = "torch", version = "2.15.0+cpu", source = { registry = "https://download.pytorch.org/whl/cpu" }, marker = "sys_platform == 'linux' or sys_platform == 'win32'" },
-]
-
-[package.dev-dependencies]
-dev = [
-    { name = "fpdf2" },
-    { name = "pillow" },
-    { name = "pytest" },
-]
-
-[package.metadata]
-requires-dist = [
-    { name = "gliner", specifier = "==0.2.30" },
-    { name = "glinker", specifier = "==0.1.1" },
-    { name = "kreuzberg", specifier = "==4.10.4" },
-    { name = "pydantic", specifier = "==2.14.3" },
-    { name = "pydantic-ai-slim", extras = ["anthropic", "openai"], specifier = "==2.66.0" },
-    { name = "torch", marker = "sys_platform != 'linux' and sys_platform != 'win32'", specifier = "==2.15.0" },
-    { name = "torch", marker = "sys_platform == 'linux' or sys_platform == 'win32'", specifier = "==2.15.0", index = "https://download.pytorch.org/whl/cpu" },
-]
-
-[package.metadata.requires-dev]
-dev = [
-    { name = "fpdf2", specifier = "==2.9.0" },
-    { name = "pillow", specifier = "==13.0.0" },
-    { name = "pytest", specifier = "==9.2.0" },
 ]
 
 [[package]]

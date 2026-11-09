@@ -2,11 +2,12 @@
 
 A learning repo with two independent projects, built to get hands-on with document AI tooling in Python:
 
-- **ner-chat**: Kreuzberg (text/OCR) → GLinker NER layer (GLiNER) → JSON store →
-  single-turn Pydantic AI agent that answers from the store through tools, with grounded structured output.
+- **ner-chat**: ask questions about the people, organizations and places in a document. Kreuzberg (text/OCR) →
+  GLinker NER layer (GLiNER) → JSON store → single-turn Pydantic AI agent that answers from the store through
+  tools, with grounded structured output.
 - **blob-boxes**: find each blob in a binary mask and the rotated rectangle that best fits it. *Work in progress.*
 
-Design decisions and their alternatives are in [`DECISIONS.md`](DECISIONS.md).
+Design decisions, with the alternatives that were rejected, are in [`DECISIONS.md`](DECISIONS.md).
 
 ## Install
 
@@ -92,8 +93,8 @@ and exits with code 2.
 uv run pytest
 ```
 
-Runs offline, with no API key. The ner-chat test drives the `ask` path with
-Pydantic AI's `TestModel` against the fixture store `tests/entities.json`.
+Runs offline, with no API key. The ner-chat test drives the `ask` path with Pydantic AI's `TestModel` against the
+fixture store `tests/entities.json`.
 
 ## Layout
 
