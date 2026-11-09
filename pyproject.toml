@@ -1,17 +1,51 @@
 [project]
-name = "task"
+name = "ner-chat-blob-boxes"
 version = "0.1.0"
-description = "Add your description here"
+description = "Learning project: a grounded NER chatbot over documents and IoU-optimal rotated boxes for blobs"
 readme = "README.md"
 authors = [
     { name = "sergio", email = "56543812+Feittoooo@users.noreply.github.com" }
 ]
-requires-python = ">=3.13"
-dependencies = []
+requires-python = ">=3.12,<3.14"
+dependencies = [
+    "glinker==0.1.1",
+    "gliner==0.2.30",
+    "kreuzberg==4.10.4",
+    "pydantic==2.14.3",
+    "pydantic-ai-slim[anthropic,openai]==2.66.0",
+    "torch==2.15.0",
+]
 
 [project.scripts]
-task = "task:main"
+ner-chat = "ner_chat.cli:main"
+
+[dependency-groups]
+dev = [
+    "fpdf2==2.9.0",
+    "pillow==13.0.0",
+    "pytest==9.2.0",
+]
 
 [build-system]
-requires = ["uv_build>=0.13.7,<0.14.0"]
+requires = ["uv_build==0.13.7"]
 build-backend = "uv_build"
+
+[tool.uv.build-backend]
+module-name = ["ner_chat"]
+
+# CPU-only torch on Linux/Windows: PyPI's Linux torch wheel pulls several GB of CUDA libraries.
+# macOS wheels on PyPI are already CPU/MPS-only.
+[tool.uv.sources]
+torch = [
+    { index = "pytorch-cpu", marker = "sys_platform == 'linux' or sys_platform == 'win32'" },
+]
+
+[[tool.uv.index]]
+name = "pytorch-cpu"
+url = "https://download.pytorch.org/whl/cpu"
+explicit = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+# Raised inside pydantic_graph (a pydantic-ai dependency) by its sync-run helper, not by this project.
+filterwarnings = ["ignore:There is no current event loop:DeprecationWarning:pydantic_graph"]
