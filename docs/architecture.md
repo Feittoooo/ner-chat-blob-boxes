@@ -150,7 +150,7 @@ classDiagram
   }
   class ask {
     <<module>>
-    +run_ask(question, store, model) AskResponse
+    +run_ask(question, store, model, request_timeout) AskResponse
     -_last_cited_entities(messages) List~EntityRef~
   }
   class agent {
@@ -262,7 +262,7 @@ sequenceDiagram
   CLI->>ST: load(entities.json)
   CLI->>M: resolve_model(--model)
   M-->>CLI: Model, or ModelConfigError and exit 2
-  CLI->>A: run_ask(question, store, model)
+  CLI->>A: run_ask(question, store, model, request_timeout)
   A->>AG: run_sync(question, deps=store, model)
   AG->>LLM: instructions, question and tool schemas, no store data
   loop while the LLM calls tools

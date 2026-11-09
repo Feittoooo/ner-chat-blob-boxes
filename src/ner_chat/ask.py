@@ -6,6 +6,7 @@ from pydantic import ValidationError
 from pydantic_ai import UnexpectedModelBehavior, capture_run_messages
 from pydantic_ai.messages import ModelMessage, ModelResponse, ToolCallPart
 from pydantic_ai.models import Model
+from pydantic_ai.settings import ModelSettings
 
 from ner_chat.agent import agent
 from ner_chat.grounding import deterministic_reply, ground
@@ -13,15 +14,20 @@ from ner_chat.schemas import AskResponse, EntityRef
 from ner_chat.store import EntityStore
 
 
-def run_ask(question: str, store: EntityStore, model: Model | str) -> AskResponse:
+def run_ask(
+    question: str, store: EntityStore, model: Model | str, *, request_timeout: float | None = None
+) -> AskResponse:
     """Answer `question` from `store` only. Every returned entity is grounded against the store.
 
     If the model keeps producing invalid output until retries run out, warn on stderr and fall back to a
     deterministic reply built from the entities it last tried to cite. Never raises for model misbehaviour.
+    `request_timeout` caps each model request in seconds, provider SDK retries included; when it runs out,
+    `ModelRequestTimeout` is raised.
     """
+    settings = ModelSettings(request_timeout=request_timeout) if request_timeout else None
     with capture_run_messages() as messages:
         try:
-            result = agent.run_sync(question, deps=store, model=model)
+            result = agent.run_sync(question, deps=store, model=model, model_settings=settings)
         except UnexpectedModelBehavior as exc:
             print(f"warning: the model's answer failed validation ({exc}); answering from the store directly.", file=sys.stderr)
             grounded = ground(AskResponse(reply="", entities=_last_cited_entities(messages)), store)
