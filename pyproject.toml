@@ -27,7 +27,7 @@ dev = [
 ]
 
 [build-system]
-requires = ["uv_build>=0.13.7,<0.14.0"]
+requires = ["uv_build==0.13.7"]
 build-backend = "uv_build"
 
 [tool.uv.build-backend]
@@ -47,3 +47,5 @@ explicit = true
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+# Raised inside pydantic_graph (a pydantic-ai dependency) by its sync-run helper, not by this project.
+filterwarnings = ["ignore:There is no current event loop:DeprecationWarning:pydantic_graph"]
