@@ -13,6 +13,13 @@ GLiNER model on CPU never needs. Rejected: plain PyPI torch (a huge `uv sync` fo
 `gliner` and `torch` are transitive deps of `glinker`, but they are pinned in `pyproject.toml` anyway because our
 code depends on their behaviour (GLiNER truncation, CPU wheels). Everything else is pinned by `uv.lock`.
 
+### Clean-install check (no system libraries)
+A fresh `git clone` (no `.venv`) followed by `uv sync --locked` installs and imports `glinker`, `kreuzberg`
+and `pydantic_ai`. A script over `uv.lock` confirmed that every locked package has a wheel for linux x86_64/aarch64,
+macOS arm64 and Windows amd64 (cp312/cp313), so nothing compiles from an sdist. The likely suspect,
+`psycopg2-binary` (pulled in by glinker's unused L2 PostgreSQL layer), ships wheels that bundle libpq.
+Known gap: torch no longer publishes Intel macOS (x86_64) wheels, so Intel Macs are unsupported.
+
 ### argparse instead of Typer/Click
 The CLI is two subcommands with a handful of flags. stdlib keeps one fewer pinned dependency.
 
@@ -31,6 +38,20 @@ The CLI is two subcommands with a handful of flags. stdlib keeps one fewer pinne
 GLinker is an entity *linking* framework (L1 NER → L2 candidate DB → L3 linker → L0 aggregation). We only need
 mentions, so we build the registered `l1_gliner` processor directly and skip the DAG.
 Rejected: a full DAG with an empty L2 database (pointless config, and L0 expects L2/L3 outputs).
+
+### OCR is optional: Kreuzberg bundles the Tesseract engine, not the language data
+With kreuzberg 4.10.4 and no system Tesseract, OCR on `samples/news_article.png` fails with
+`Failed loading language 'eng'`. The engine is compiled into the wheel, but `eng.traineddata` is not shipped.
+After downloading `tessdata_fast/eng.traineddata` and setting `TESSDATA_PREFIX`, OCR returns the full text.
+Since `uv sync` alone can't provide that file, the PNG/OCR path is documented as optional, and `extract` fails
+with a clear message when it gets no text. Rejected: committing the 4 MB traineddata into the repo, or downloading
+it at runtime (a hidden network side effect).
+
+### Collapse whitespace, then chunk by sentence
+Tesseract put a blank line *inside* a name ("Marta\n\nIbarra"), and PDF extraction breaks lines mid-sentence.
+So before NER, all whitespace runs collapse to one space, and chunks are built from whole sentences. Mention
+offsets therefore refer to this normalized text, not to the raw extraction. Rejected: splitting on blank lines
+(this splits entities on OCR output).
 
 ### Chunk text before NER
 GLiNER silently truncates long inputs (verified above), so a whole document passed as one string would lose every
