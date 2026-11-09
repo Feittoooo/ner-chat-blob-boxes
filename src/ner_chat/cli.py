@@ -8,6 +8,9 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 DEFAULT_STORE = "entities.json"
+# Per model request, SDK retries included. Without a cap the OpenAI client Ollama uses waits up to 600 s per
+# attempt and retries twice, so a failed model load could look like a 30-minute hang.
+DEFAULT_TIMEOUT = 120.0
 
 
 def _quiet_third_party_warnings() -> None:
@@ -54,7 +57,7 @@ def cmd_extract(args: argparse.Namespace) -> int:
 
 def cmd_ask(args: argparse.Namespace) -> int:
     import pydantic_ai
-    from pydantic_ai.exceptions import ModelAPIError, ModelConnectionError, ModelNotFoundError
+    from pydantic_ai.exceptions import ModelAPIError, ModelConnectionError, ModelNotFoundError, ModelRequestTimeout
 
     from ner_chat.ask import run_ask
 
@@ -68,24 +71,35 @@ def cmd_ask(args: argparse.Namespace) -> int:
         return 1
     store = EntityStore.load(store_path)
 
+    def ollama_hint() -> str:
+        if not args.model.startswith("ollama:"):
+            return ""
+        name = args.model.removeprefix("ollama:")
+        return (
+            f"\nIs Ollama running at {ollama_url(args.ollama_url)}? Start it with `ollama serve`, download the "
+            f"model with `ollama pull {name}`, and check `ollama ps` (loading needs free RAM)."
+        )
+
     try:
         model = resolve_model(args.model, args.ollama_url)
-        response = run_ask(args.question, store, model)
+        # stderr, so --json output on stdout stays clean. Without this a slow model load looks like a hang.
+        print(f"Asking {args.model}... (a local model can take a minute to load on first use)", file=sys.stderr, flush=True)
+        response = run_ask(args.question, store, model, request_timeout=args.timeout)
     except ModelConfigError as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 2
+    except ModelRequestTimeout:
+        print(
+            f"error: model {args.model!r} did not answer within {args.timeout:g} s.{ollama_hint()}\n"
+            f"Retry, or raise --timeout. {ALTERNATIVES}",
+            file=sys.stderr,
+        )
+        return 2
     except (ModelConnectionError, ModelNotFoundError) as exc:
-        hint = ""
-        if args.model.startswith("ollama:"):
-            name = args.model.removeprefix("ollama:")
-            hint = (
-                f"\nIs Ollama running at {ollama_url(args.ollama_url)}? "
-                f"Start it with `ollama serve` and download the model with `ollama pull {name}`."
-            )
-        print(f"error: cannot reach model {args.model!r}: {exc}{hint}\n{ALTERNATIVES}", file=sys.stderr)
+        print(f"error: cannot reach model {args.model!r}: {exc}{ollama_hint()}\n{ALTERNATIVES}", file=sys.stderr)
         return 2
     except ModelAPIError as exc:
-        print(f"error: model {args.model!r} failed: {exc}\n{ALTERNATIVES}", file=sys.stderr)
+        print(f"error: model {args.model!r} failed: {exc}{ollama_hint()}\n{ALTERNATIVES}", file=sys.stderr)
         return 2
 
     if args.json:
@@ -119,6 +133,9 @@ def build_parser() -> argparse.ArgumentParser:
     ask.add_argument("--store", default=DEFAULT_STORE, help="JSON store written by extract")
     ask.add_argument("--model", default=DEFAULT_MODEL, help=f"any Pydantic AI model string (default {DEFAULT_MODEL}; 'test' = offline)")
     ask.add_argument("--ollama-url", default=None, help="Ollama OpenAI-compatible URL (default $OLLAMA_BASE_URL or localhost)")
+    ask.add_argument(
+        "--timeout", type=float, default=DEFAULT_TIMEOUT, help=f"max seconds per model request (default {DEFAULT_TIMEOUT:g})"
+    )
     ask.add_argument("--json", action="store_true", help="print the structured response as JSON")
     ask.set_defaults(func=cmd_ask)
     return parser

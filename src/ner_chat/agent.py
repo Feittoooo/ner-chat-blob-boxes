@@ -83,18 +83,22 @@ def list_labels(ctx: RunContext[EntityStore]) -> dict[str, int]:
     return ctx.deps.labels()
 
 
-# How many words away from an entity name a number still counts as "its" count.
+# How many words after an entity name a number still counts as "its" count.
 _NEAR_WORDS = 3
 
 
 def numbers_near(reply: str, name: str) -> list[int]:
-    """Integers written as digits within a few words of `name` in `reply`."""
+    """Integers written as digits within a few words after `name` in `reply`.
+
+    Only words after the name are checked: in "A (5 mentions) and B (2 mentions)" the 5 sits right before B
+    but belongs to A.
+    """
     words = re.findall(r"\w+", reply.casefold())
     target = re.findall(r"\w+", name.casefold())
     found = []
     for i in range(len(words) - len(target) + 1):
         if target and words[i : i + len(target)] == target:
-            window = words[max(0, i - _NEAR_WORDS) : i] + words[i + len(target) : i + len(target) + _NEAR_WORDS]
+            window = words[i + len(target) : i + len(target) + _NEAR_WORDS]
             found += [int(w) for w in window if w.isdigit()]
     return found
 

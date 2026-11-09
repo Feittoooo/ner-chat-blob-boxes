@@ -103,11 +103,17 @@ That depends on model retries, and a pure function is deterministic and easy to 
 ### Output validator: deliberately minimal
 The structured fields are grounded in code, but `reply` is free text, so a model could write "mentioned 7 times"
 next to a grounded count of 3. The validator does the simplest check that catches this:
-- it takes the words within 3 of each cited entity name in `reply`;
+- it takes the 3 words **after** each cited entity name in `reply`;
 - any word made only of digits that differs from that entity's stored count raises `ModelRetry` with the
   correct count (`retries={"output": 2}`).
-Spelled-out numbers ("three") are not parsed, and there is no NLP. A year next to a name ("Valencia in 2029")
-is a known false positive. It costs a retry and, at worst, the fallback below, which is still correct.
+Only words after the name are checked. The first version also looked at the 3 words before it, and with a real
+model (`qwen3`) the common answer "Lumora Energy (5 mentions) and European Investment Bank (2 mentions)" was
+rejected: the 5 right before the bank's name was taken as the bank's count. Every retry failed the same way and
+the run ended in the fallback. Counts follow the name in English and Spanish ("X is mentioned 3 times",
+"X (3 menciones)"); a count before the name ("3 mentions of X") is no longer checked. The structured counts are
+grounded anyway, so a missed check costs less than rejecting a correct answer.
+Spelled-out numbers ("three") are not parsed, and there is no NLP. A year right after a name ("Valencia in
+2029") is a known false positive. It costs a retry and, at worst, the fallback below, which is still correct.
 When retries run out, Pydantic AI raises `UnexpectedModelBehavior`. `run_ask` catches it, prints a warning
 with the cause to stderr, and returns a deterministic reply built from the grounded entities of the last
 output-tool call (recovered with `capture_run_messages`). There is no extra `needs_fallback` field: this one
@@ -126,3 +132,14 @@ it works without the env var. A missing key (`UserError`) or an unreachable Olla
 `ModelNotFoundError`) produces a clear message suggesting `--model test`, with exit code 2.
 The pydantic-ai 2.66 first-run banner is disabled with `pydantic_ai.BANNER_ENABLED = False` because the CLI owns
 its output.
+
+### Progress message and request timeout for `ask`
+The first real run against Ollama looked like a hang: the first model load after installing (5 GB, with
+2.9 GB of free RAM) failed after ~50 s with an HTTP 500 (Ollama's `server.log`), and the CLI printed nothing
+while it waited. Two changes:
+- `ask` prints `Asking <model>...` to stderr before the call, so `--json` on stdout stays clean.
+- `--timeout` (default 120 s) sets `ModelSettings(request_timeout=...)`. It is one deadline over the whole
+  request, provider SDK retries included, unlike `timeout`, which each retry re-arms. Without it the OpenAI
+  client Ollama uses waits up to 600 s per attempt with 2 retries. When it runs out, `ModelRequestTimeout`
+  becomes a clear error (with Ollama hints) and exit code 2.
+`run_ask` takes `request_timeout` as an optional keyword (default none), so the offline test is unaffected.

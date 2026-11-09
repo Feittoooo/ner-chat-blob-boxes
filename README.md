@@ -85,7 +85,8 @@ and unknown names show as `not mentioned` with count 0.
 | `anthropic:claude-haiku-5-5`, `openai:...` | `ANTHROPIC_API_KEY` / `OPENAI_API_KEY` (both SDKs are installed) |
 
 If the key is missing or Ollama is unreachable, `ask` prints what to export or start, suggests `--model test`,
-and exits with code 2.
+and exits with code 2. Each model request is capped at 120 s (`--timeout <seconds>`). The first run after
+`ollama pull` can take a minute while the model loads into memory.
 
 ## Tests
 
