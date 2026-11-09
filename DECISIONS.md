@@ -56,3 +56,59 @@ offsets therefore refer to this normalized text, not to the raw extraction. Reje
 ### Chunk text before NER
 GLiNER silently truncates long inputs (verified above), so a whole document passed as one string would lose every
 mention past the first few hundred words. `ner.py` splits the text into chunks and keeps each chunk's offset.
+The edge model's `max_len` is 2048 words, so the sample would fit in one piece, but the 200-word chunks
+cost nothing and protect against long documents and models with smaller windows.
+Verified: the OCR output (with "Marta\n\nIbarra") gives exactly the same counts as the PDF.
+
+### NER threshold 0.5
+Measured on `samples/news_article.pdf` (7 expected entities):
+
+| threshold | expected entities found, exact count | false positives |
+|---|---|---|
+| 0.3 | 6 | 3 ("port", "Local business groups", ...) |
+| 0.4 | 6 | 2 |
+| **0.5** | **6** | **0** |
+| 0.6 | 5 (Valencia drops from 4 to 1) | 0 |
+
+"Spain" is missed at every threshold: a real limitation of the 60M model, documented in the README rather than
+hidden by tuning the sample text.
+
+### JSON store, normalized key recomputed on load
+JSON rather than SQLite: the store is a few hundred records at most, the test fixture `tests/entities.json` must be
+hand-written, and a JSON file is readable in a diff. The lookup key is not saved. It is recomputed with
+`normalize_name` on load, so a hand-written fixture can't carry a key that disagrees with the code. Records that
+normalize to the same key merge (counts summed). There are no aliases or coreference: "Ibarra" is not
+"Marta Ibarra".
+
+### Grounding is a plain function after the run
+`grounding.ground()` overwrites name/label/count of every cited entity with store values (count 0 /
+"not mentioned" if absent) after `agent.run_sync` returns. It does not depend on the model reading its tool
+results, so it holds for `TestModel`, which never does. Rejected: grounding inside an output validator.
+That depends on model retries, and a pure function is deterministic and easy to test in isolation.
+
+### Output validator: deliberately minimal
+The structured fields are grounded in code, but `reply` is free text, so a model could write "mentioned 7 times"
+next to a grounded count of 3. The validator does the simplest check that catches this:
+- it takes the words within 3 of each cited entity name in `reply`;
+- any word made only of digits that differs from that entity's stored count raises `ModelRetry` with the
+  correct count (`retries={"output": 2}`).
+Spelled-out numbers ("three") are not parsed, and there is no NLP. A year next to a name ("Valencia in 2029")
+is a known false positive. It costs a retry and, at worst, the fallback below, which is still correct.
+When retries run out, Pydantic AI raises `UnexpectedModelBehavior`. `run_ask` catches it, prints a warning
+with the cause to stderr, and returns a deterministic reply built from the grounded entities of the last
+output-tool call (recovered with `capture_run_messages`). There is no extra `needs_fallback` field: this one
+safety net covers both cases. Rejected: a richer number/entity matcher. More code, and it would still only be
+a defence for text whose structured counts are already guaranteed.
+
+### Heavy imports only where needed
+`ask` never imports glinker/torch (the CLI imports `ner` inside the extract command, and the NER defaults live in
+the lightweight `ner_defaults.py`). `ask --model test` runs in ~1.5 s instead of loading a transformer stack it
+doesn't use.
+
+### Model selection
+`--model` takes any Pydantic AI model string; the default is `ollama:qwen3` (free, local). `ollama:<name>` is
+built explicitly with `OllamaProvider(base_url=--ollama-url | $OLLAMA_BASE_URL | http://localhost:11434/v1)`, so
+it works without the env var. A missing key (`UserError`) or an unreachable Ollama (`ModelConnectionError` /
+`ModelNotFoundError`) produces a clear message suggesting `--model test`, with exit code 2.
+The pydantic-ai 2.66 first-run banner is disabled with `pydantic_ai.BANNER_ENABLED = False` because the CLI owns
+its output.
