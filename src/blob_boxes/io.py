@@ -1,9 +1,12 @@
-"""Read a mask file into the boolean array the algorithm works on."""
+"""Files in and out: read a mask into the boolean array the algorithm works on, write the boxes as CSV."""
 
+import csv
 from pathlib import Path
 
 import cv2
 import numpy as np
+
+from blob_boxes.box import DECIMALS, RotatedBox
 
 # Image pixels brighter than mid-grey are blob pixels. A plain "non-zero" rule would turn the near-black noise
 # of lossy formats (JPEG) or anti-aliased edges into extra blobs.
@@ -35,3 +38,21 @@ def load_mask(path: str | Path) -> np.ndarray:
     if mask.ndim != 2:
         raise MaskError(f"{path} must be a 2-D mask, got shape {mask.shape}")
     return mask
+
+
+CSV_COLUMNS = ("blob_id", "center_x", "center_y", "width", "height", "angle")
+
+
+def box_row(blob_id: int, box: RotatedBox) -> list[str]:
+    """One CSV row with DECIMALS decimals; `fit_boxes` already rounded the box, so nothing changes here."""
+    box = box.rounded()
+    values = [box.cx, box.cy, box.width, box.height, box.angle]
+    return [str(blob_id)] + [f"{v:.{DECIMALS}f}" for v in values]
+
+
+def write_csv(rows: list[tuple[int, RotatedBox]], path: str | Path) -> None:
+    """Write (blob_id, box) pairs with the CSV_COLUMNS header. Unix line endings on every OS."""
+    with Path(path).open("w", newline="", encoding="utf-8") as f:
+        writer = csv.writer(f, lineterminator="\n")
+        writer.writerow(CSV_COLUMNS)
+        writer.writerows(box_row(blob_id, box) for blob_id, box in rows)
