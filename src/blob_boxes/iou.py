@@ -12,15 +12,16 @@ from blob_boxes.box import RotatedBox
 Window = tuple[int, int, int, int]  # x_min, y_min, x_max, y_max: an inclusive pixel range of the image
 
 
-def padded_window(blob: Blob, image_shape: tuple[int, int], margin: int) -> Window:
-    """The blob's bounding box grown by `margin` pixels on each side, clipped to the image."""
+def window_around(box: RotatedBox, blob: Blob, image_shape: tuple[int, int]) -> Window:
+    """Every pixel the rectangle or the blob reaches, clipped to the image."""
     rows, cols = image_shape
     h, w = blob.pixels.shape
+    bx_min, by_min, bx_max, by_max = box.pixel_bounds()
     return (
-        max(0, blob.x0 - margin),
-        max(0, blob.y0 - margin),
-        min(cols - 1, blob.x0 + w - 1 + margin),
-        min(rows - 1, blob.y0 + h - 1 + margin),
+        max(0, min(bx_min, blob.x0)),
+        max(0, min(by_min, blob.y0)),
+        min(cols - 1, max(bx_max, blob.x0 + w - 1)),
+        min(rows - 1, max(by_max, blob.y0 + h - 1)),
     )
 
 
@@ -42,31 +43,24 @@ def pixel_centres(window: Window) -> tuple[np.ndarray, np.ndarray]:
 
 def discrete_iou(box: RotatedBox, blob: Blob, image_shape: tuple[int, int]) -> float:
     """The exact pixel IoU: this is the quantity blob-boxes maximizes and reports."""
-    rows, cols = image_shape
-    h, w = blob.pixels.shape
-    bx_min, by_min, bx_max, by_max = box.pixel_bounds()
-    # Every pixel the rectangle or the blob covers, inside the image.
-    window = (
-        max(0, min(bx_min, blob.x0)),
-        max(0, min(by_min, blob.y0)),
-        min(cols - 1, max(bx_max, blob.x0 + w - 1)),
-        min(rows - 1, max(by_max, blob.y0 + h - 1)),
-    )
+    window = window_around(box, blob, image_shape)
     covered = box.covers(*pixel_centres(window))
     intersection = int((covered & blob_in_window(blob, window)).sum())
     union = int(covered.sum()) + blob.area - intersection
     return intersection / union if union else 0.0
 
 
-def soft_iou(box: RotatedBox, blob: Blob, window: Window) -> float:
+def soft_iou(box: RotatedBox, blob: Blob, image_shape: tuple[int, int]) -> float:
     """A continuous stand-in for `discrete_iou`, used only to guide the search.
 
     Each pixel counts by the share of its 1x1 square inside the rectangle, measured along the rectangle's two
     axes (exact when the rectangle is axis-aligned, a close estimate when rotated). A pixel whose centre is on
     an edge counts half, the same threshold `discrete_iou` uses, and a perfect fit scores 1. Unlike the exact
     IoU, it changes whenever an edge moves across a pixel, so the search always knows which way is better.
-    Only pixels inside the fixed `window` count: the caller keeps it larger than any rectangle worth trying.
     """
+    # Coverage reaches half a pixel past each edge, so look one pixel further than the rectangle itself.
+    grown = RotatedBox(box.cx, box.cy, abs(box.width) + 1, abs(box.height) + 1, box.angle)
+    window = window_around(grown, blob, image_shape)
     u, v = box.to_frame(*pixel_centres(window))
     coverage = np.clip(abs(box.width) / 2 + 0.5 - np.abs(u), 0, 1) * np.clip(
         abs(box.height) / 2 + 0.5 - np.abs(v), 0, 1

@@ -12,6 +12,8 @@ import numpy as np
 
 # Pixel centres exactly on an edge must stay covered whatever the floating-point rounding of the rotation.
 _EDGE_TOLERANCE = 1e-9
+# Decimals of the reported boxes (the CSV). `rounded` is how a box gets there.
+DECIMALS = 4
 
 
 @dataclass(frozen=True)
@@ -34,6 +36,15 @@ class RotatedBox:
         if math.isclose(width, height):
             angle = (angle + 45) % 90 - 45
         return RotatedBox(self.cx, self.cy, width, height, angle)
+
+    def rounded(self, decimals: int = DECIMALS) -> "RotatedBox":
+        """Every value rounded; an angle that rounds up to 90 becomes -90, the same rectangle, to stay in range."""
+        angle = round(self.angle, decimals)
+        if angle >= 90:
+            angle -= 180
+        # `+ 0.0` turns -0.0 into 0.0, so a zero never prints with a sign.
+        cx, cy, width, height = (round(v, decimals) + 0.0 for v in (self.cx, self.cy, self.width, self.height))
+        return RotatedBox(cx, cy, width, height, angle + 0.0)
 
     def to_frame(self, xs: np.ndarray, ys: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
         """Coordinates of points in the rectangle's own frame: u along the width, v along the height."""
