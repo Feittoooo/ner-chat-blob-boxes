@@ -5,7 +5,7 @@ A learning repo with two independent projects, built to get hands-on with docume
 - **ner-chat**: ask questions about the people, organizations and places in a document. Kreuzberg (text/OCR) →
   GLinker NER layer (GLiNER) → JSON store → single-turn Pydantic AI agent that answers from the store through
   tools, with grounded structured output.
-- **blob-boxes**: find each blob in a binary mask and the rotated rectangle that best fits it. *Work in progress.*
+- **blob-boxes**: find each blob in a binary mask and the rotated rectangle with the highest IoU with it.
 
 Design decisions, with the alternatives that were rejected, are in [`DECISIONS.md`](DECISIONS.md).
 
@@ -88,6 +88,43 @@ If the key is missing or Ollama is unreachable, `ask` prints what to export or s
 and exits with code 2. Each model request is capped at 120 s (`--timeout <seconds>`). The first run after
 `ollama pull` can take a minute while the model loads into memory.
 
+## blob-boxes
+
+```bash
+uv run blob-boxes samples/masks/example_mask.png -o blob_bounding_boxes.csv
+```
+
+The input is a `.npy` array (non-zero = blob) or an image (brighter than mid-grey = blob). The output CSV has one
+row per blob:
+
+| Column | Meaning |
+|---|---|
+| `blob_id` | 1, 2, ... in the order blobs are met reading the mask row by row, top to bottom |
+| `center_x`, `center_y` | rectangle centre in pixels; pixel (row r, column c) has its centre at x = c, y = r |
+| `width`, `height` | the long side and the short side, in pixels (`width >= height`) |
+| `angle` | direction of the long side in degrees, from +x towards +y (clockwise on screen, since y points down), in [-90, 90); squares use [-45, 45) |
+
+Blobs are 8-connected (pixels touching at a corner are one blob). IoU is measured on pixels: the rectangle covers
+a pixel when the pixel's centre lies inside it, and the part of a rectangle outside the image does not count.
+A summary goes to stderr:
+
+```
+8 blobs -> blob_bounding_boxes.csv; IoU mean 0.9735, min 0.8424 (blob 5)
+```
+
+The same from Python, on a NumPy array:
+
+```python
+from blob_boxes import fit_boxes
+
+for r in fit_boxes(mask):  # mask: 2-D ndarray, non-zero = blob
+    print(r.blob_id, r.box.cx, r.box.cy, r.box.width, r.box.height, r.box.angle, r.iou)
+```
+
+`samples/masks/example_mask.{png,npy}` (256×256, from `scripts/make_masks.py`) has one shape per hard case:
+rotated rectangles, a square at 45°, a rectangle cut by the image border, a 1-pixel-wide diagonal line, a single
+pixel, an ellipse and an irregular blob. The rectangles, line and pixel are fitted with IoU 1.
+
 ## Tests
 
 ```bash
@@ -101,7 +138,8 @@ fixture store `tests/entities.json`.
 
 ```
 src/ner_chat/      ner-chat: cli, extract (Kreuzberg), ner (GLinker L1), store, agent (tools), grounding, ask
-scripts/           make_samples.py: regenerates samples/news_article.{pdf,png}
+src/blob_boxes/    blob-boxes: cli, io (mask in, CSV out), blobs, box, iou, fit
+scripts/           make_samples.py: samples/news_article.{pdf,png}; make_masks.py: samples/masks/example_mask.*
 samples/           sample inputs
 tests/             unit tests + fixture store
 ```
