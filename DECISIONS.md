@@ -143,3 +143,30 @@ while it waited. Two changes:
   client Ollama uses waits up to 600 s per attempt with 2 retries. When it runs out, `ModelRequestTimeout`
   becomes a clear error (with Ollama hints) and exit code 2.
 `run_ask` takes `request_timeout` as an optional keyword (default none), so the offline test is unaffected.
+
+## blob-boxes
+
+### Dependencies
+`numpy==2.5.4` (already locked through gliner/torch, now pinned directly), `opencv-python-headless==5.0.0.93`
+(the headless build: no GUI windows are needed, so no GUI libraries are pulled in) and `scipy==1.18.1`.
+
+### Verified: what `cv2.minAreaRect` returns in OpenCV 5.0.0
+Rectangles of 60×20 px were drawn without OpenCV (a pixel is filled when its centre lies inside the rotated
+rectangle), at known angles of the long side measured from +x towards +y (y grows downwards, so positive is
+clockwise on screen). Their filled pixels went through `cv2.minAreaRect`:
+
+| long side at | returned angle | returned (w, h) | `w` is the |
+|---|---|---|---|
+| 0° | −90.00 | (20.0, 60.0) | short side |
+| 30° | −60.02 | (20.0, 60.0) | short side |
+| 80° | −10.01 | (19.9, 59.9) | short side |
+| 90° | −90.00 | (60.0, 20.0) | long side |
+| 135° (= −45°) | −45.00 | (59.4, 19.8) | long side |
+| −80° | −79.99 | (59.9, 19.9) | long side |
+
+The returned angle is always in [−90, 0), and which side is called `w` flips with the orientation. Converting
+to this project's convention (width = long side, angle of the long side in [−90, 90)):
+- if `w < h`: width = h, height = w, angle = returned angle + 90;
+- otherwise: width = w, height = h, angle = returned angle.
+
+The CSV therefore never exposes OpenCV's convention, and `minAreaRect` is used only as a starting point.

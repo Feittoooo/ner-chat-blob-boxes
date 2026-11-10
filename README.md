@@ -104,5 +104,4 @@ src/ner_chat/      ner-chat: cli, extract (Kreuzberg), ner (GLinker L1), store, 
 scripts/           make_samples.py: regenerates samples/news_article.{pdf,png}
 samples/           sample inputs
 tests/             unit tests + fixture store
-docs/architecture.md  UML diagrams of ner-chat (class + sequence, Mermaid)
 ```
