@@ -10,6 +10,8 @@ from pathlib import Path
 import cv2
 import numpy as np
 
+from blob_boxes.box import RotatedBox
+
 OUT_DIR = Path(__file__).resolve().parent.parent / "samples" / "masks"
 SIZE = 256
 
@@ -34,12 +36,12 @@ def centres() -> tuple[np.ndarray, np.ndarray]:
 
 
 def rotated_rect(cx: float, cy: float, long_side: float, short_side: float, angle: float) -> np.ndarray:
-    """Pixels whose centre lies inside the rotated rectangle."""
-    xs, ys = centres()
-    t = np.deg2rad(angle)
-    u = (xs - cx) * np.cos(t) + (ys - cy) * np.sin(t)
-    v = -(xs - cx) * np.sin(t) + (ys - cy) * np.cos(t)
-    return (np.abs(u) <= long_side / 2) & (np.abs(v) <= short_side / 2)
+    """Pixels whose centre lies inside the rotated rectangle.
+
+    Uses blob-boxes' own coverage rule, so a rectangle drawn here has IoU exactly 1 with the same box: with a
+    separate rule, centres lying on an edge fell on either side depending on floating-point rounding.
+    """
+    return RotatedBox(cx, cy, long_side, short_side, angle).covers(*centres())
 
 
 def rotated_ellipse(cx: float, cy: float, a: float, b: float, angle: float) -> np.ndarray:
