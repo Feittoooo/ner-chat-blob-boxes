@@ -14,10 +14,14 @@ dependencies = [
     "pydantic==2.14.3",
     "pydantic-ai-slim[anthropic,openai]==2.66.0",
     "torch==2.15.0",
+    "numpy==2.5.4",
+    "opencv-python-headless==5.0.0.93",
+    "scipy==1.18.1",
 ]
 
 [project.scripts]
 ner-chat = "ner_chat.cli:main"
+blob-boxes = "blob_boxes.cli:main"
 
 [dependency-groups]
 dev = [
@@ -31,7 +35,7 @@ requires = ["uv_build==0.13.7"]
 build-backend = "uv_build"
 
 [tool.uv.build-backend]
-module-name = ["ner_chat"]
+module-name = ["ner_chat", "blob_boxes"]
 
 # CPU-only torch on Linux/Windows: PyPI's Linux torch wheel pulls several GB of CUDA libraries.
 # macOS wheels on PyPI are already CPU/MPS-only.

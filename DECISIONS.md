@@ -143,3 +143,103 @@ while it waited. Two changes:
   client Ollama uses waits up to 600 s per attempt with 2 retries. When it runs out, `ModelRequestTimeout`
   becomes a clear error (with Ollama hints) and exit code 2.
 `run_ask` takes `request_timeout` as an optional keyword (default none), so the offline test is unaffected.
+
+## blob-boxes
+
+### Dependencies
+`numpy==2.5.4` (already locked through gliner/torch, now pinned directly), `opencv-python-headless==5.0.0.93`
+(the headless build: no GUI windows are needed, so no GUI libraries are pulled in) and `scipy==1.18.1`.
+
+### Verified: what `cv2.minAreaRect` returns in OpenCV 5.0.0
+Rectangles of 60×20 px were drawn without OpenCV (a pixel is filled when its centre lies inside the rotated
+rectangle), at known angles of the long side measured from +x towards +y (y grows downwards, so positive is
+clockwise on screen). Their filled pixels went through `cv2.minAreaRect`:
+
+| long side at | returned angle | returned (w, h) | `w` is the |
+|---|---|---|---|
+| 0° | −90.00 | (20.0, 60.0) | short side |
+| 30° | −60.02 | (20.0, 60.0) | short side |
+| 80° | −10.01 | (19.9, 59.9) | short side |
+| 90° | −90.00 | (60.0, 20.0) | long side |
+| 135° (= −45°) | −45.00 | (59.4, 19.8) | long side |
+| −80° | −79.99 | (59.9, 19.9) | long side |
+
+The returned angle is always in [−90, 0), and which side is called `w` flips with the orientation. Converting
+to this project's convention (width = long side, angle of the long side in [−90, 90)):
+- if `w < h`: width = h, height = w, angle = returned angle + 90;
+- otherwise: width = w, height = h, angle = returned angle.
+
+The CSV therefore never exposes OpenCV's convention, and `minAreaRect` is used only as a starting point.
+
+### 8-connectivity
+Pixels that touch only at a corner belong to the same blob. A 1-pixel-wide diagonal line is drawn exactly that
+way, and with 4-connectivity the sample mask's line falls apart: 53 blobs instead of 8. On a larger 2048×2048
+test mask (147 blobs) both give the same count, so the choice matters only for thin diagonal shapes.
+
+### Stable blob ids: the SAUF labelling algorithm
+Blob ids are OpenCV's labels, which follow reading order (row by row) with `cv2.CCL_SAUF`. OpenCV's default
+algorithm does not promise that order and, run in parallel on the 2048×2048 mask, it broke it. SAUF keeps the ids
+stable across machines and CPU counts.
+
+### Pixel-centre IoU, nothing outside the image
+Pixel (row r, column c) has its centre at x = c, y = r. A rectangle covers a pixel when that centre lies inside
+it, edges included (with a 1e-9 tolerance, so floating-point rounding of the rotation cannot flip a centre that
+is exactly on an edge; the sample generator uses the same rule, which is why its rectangles score exactly 1).
+Rejected: the exact overlapping area of each pixel square. It is costlier and scores a box against a shape the
+mask does not have: the mask is pixels, so the box is judged as pixels.
+
+Pixels of the rectangle that fall outside the image do not count. A rectangle cut by the border then scores 1
+with its full-size box; counting the outside part would drop that sample to 0.70 and push the box to shrink
+into the image, which misdescribes the blob. Several boxes can then tie (any extension past the border); the
+search keeps the first it finds.
+
+### Search: smooth IoU, then exact IoU
+The pixel IoU moves in jumps: shifting an 8×2 bar's box changes nothing until 0.49 px, then drops from 1.0 to
+0.78. A local optimizer sees flat ground and stops. So the search runs in two phases:
+1. **Smooth IoU** (`soft_iou`): each pixel counts by the share of it inside the rectangle along the rectangle's
+   axes, a ramp from 0 to 1 over one pixel, half at the edge. Exact for axis-aligned boxes, and a perfect fit
+   scores 1. On 300 random boxes around a 60×20 blob it tracks the exact IoU with correlation 0.9998 (mean gap
+   0.0014) and picks the same best box. Nelder-Mead (derivative-free, robust to the remaining kinks) maximizes
+   it over (cx, cy, width, height, angle). A first version used a sigmoid per pixel; it scored a perfect 8×2 fit
+   at 0.49, because on thin shapes every pixel sits close to an edge, so it was dropped.
+2. **Exact IoU**: a pattern search (± a step on each parameter, steps shrinking from 1 px / 2° to 0.05 px / 0.1°,
+   strict improvements only) polishes every candidate on the real objective.
+
+Starting points: OpenCV's `minAreaRect` (raw, and grown by 1 px per side since it hugs pixel centres), the
+tightest box along the principal axes, and the box with the blob's spread (a filled w×h rectangle has variance
+w²/12 along its width), which cuts through ragged ends such as an ellipse's. The raw `minAreaRect` is kept
+because on a staircase line its sub-pixel thickness scores higher: without it, the sample line scored 0.79,
+below `minAreaRect`'s 0.89. The highest exact IoU wins, ties to the earliest, so the result is never below
+`minAreaRect` (checked on every blob of both masks).
+
+Small blobs have many local optima: polishing every candidate instead of only the best improved 85 of the
+147 blobs, by up to 0.08. Then random restarts from the winner (nudge, polish, keep strict improvements):
+
+| restarts | mean IoU (147 blobs) | extra time |
+|---|---|---|
+| 0 | 0.940 | — |
+| 10 | 0.947 | 8 s |
+| 20 | 0.948 | 14 s |
+| 40 | 0.951 | 27 s |
+
+30 is the trade-off (~20 s for the whole mask). The random generator has a fixed seed and is created per blob, so
+the output is identical on every run and a blob's box does not depend on the others. Raw `minAreaRect` averages
+0.833 on that mask; the fit averages 0.949.
+
+### Width, height and angle convention
+`width` is the long side and `angle` its direction, from +x towards +y (clockwise on screen), normalized to
+[-90, 90): a rectangle and the same one turned 180° are identical. A square is identical every 90°, so its angle
+goes to [-45, 45). Normalizing never changes the covered pixels (checked on 2000 random boxes).
+
+### Rounding is part of the fit
+The search tends to end with an edge exactly on a row of pixel centres (that is where the IoU jumps). Rounding
+the CSV to 4 decimals then moved some edges by 0.00005 px and dropped that row: two sample rectangles fell from
+1.0 to 0.99. The fit therefore rounds the box itself, also trying it grown by 0.001 px, and reports the IoU of the
+rounded box, so recomputing the IoU from the CSV gives exactly the reported value.
+
+### Edge cases
+- **1-pixel blob**: a 1×1 box at the pixel, IoU 1 (the search is skipped once a start scores 1).
+- **Thin lines**: the box may be thinner than a pixel (0.80 px for the sample's staircase line, IoU 1), since
+  only pixel centres count.
+- **Border blobs**: see "nothing outside the image" above.
+- **Squares**: angle in [-45, 45), as above.
